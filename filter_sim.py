@@ -19,7 +19,9 @@ for layer in tqdm([0]): #, 2, 5, 7, 10, 12, 14, 17, 19, 21, 24, 26, 28], desc='G
         for j in range(3): # rgb
             filters.append(vgg.features[layer].weight.data.numpy()[i, j, :, :]) # out, in, w, h (or h, w but who cares)
 print("Filters got")
-perms = create_permutations([-1,0,1], 9)
+choices = np.random.randint(-10, 10, 3)
+perms = create_permutations(choices, 9)
+print(f"Created {len(perms)} permutations")
 encodings = []
 filters = [np.reshape(filter, 9) for filter in filters]
 
@@ -65,7 +67,15 @@ for i in tqdm(range(len(encodings)), desc='Finalizing Encodings'):
         if i>j:
             data[i][j] = data[j][i]
 
+sorted_col_indices = sorted(range(len([row[0] for row in data])), key=lambda k: [row[0] for row in data][k], reverse=True)
+data2 = []
+for row in data:
+    data2.append([row[i] for i in sorted_col_indices])
+data2=[data2[i] for i in sorted_col_indices]
+
 figure = plt.figure()
 axes = figure.add_subplot(111)
-caxes = axes.matshow(np.array(data), interpolation ='none')
+caxes = axes.matshow(np.array(data2), interpolation ='none')
+
 figure.colorbar(caxes)
+figure.savefig(str(choices)+".png")

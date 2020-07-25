@@ -8,16 +8,16 @@ from util import *
 
 linSort = False
 hierSort = True
-vis = False
+vis = True
 randMat = False
 method = "randomMatrixGeneration" if randMat else "randomNumberPermutation"
 
 vgg = models.vgg16(pretrained=True)
-layer_1 = vgg.features[0].weight.data.numpy() # 64, 3, 3, 3
+# layer_1 = vgg.features[0].weight.data.numpy() # 64, 3, 3, 3
 
 # For each layer, get the filters
 filters = []
-for layer in tqdm([0]): #, 2, 5, 7, 10, 12, 14, 17, 19, 21, 24, 26, 28], desc='Getting Layer Filters'): # Conv2D layers
+for layer in tqdm([28]): #, 2, 5, 7, 10, 12, 14, 17, 19, 21, 24, 26, 28], desc='Getting Layer Filters'): # Conv2D layers
     for i in range(vgg.features[layer].out_channels): # filters
         for j in range(3): # rgb
             filters.append(vgg.features[layer].weight.data.numpy()[i, j, :, :]) # out, in, w, h (or h, w but who cares)
@@ -31,7 +31,7 @@ frames = []
 if method == "randomNumberPermutation":
     frames = create_permutations([0, 1/3, 2/3, 1], 9)
 elif method == "randomMatrixGeneration":
-    frames = np.random.rand(50000, 9)
+    frames = np.random.randint(0, 10, (50000, 9))
 else:
     frames = create_permutations([0, 1 / 3, 2 / 3, 1], 9)
 print(f"Created {len(frames)} permutations")
@@ -93,7 +93,7 @@ if hierSort:
         plt.xlim([0, len(dist_mat)])
         plt.ylim([0, len(dist_mat)])
         plt.show(block=False)
-        plt.savefig("permutation_mag1_noNeg_thirds/"+str(method)+".png")
+        plt.savefig("permutation_mag1_noNeg_thirds_l28/"+str(method)+".png")
 
 if vis:
     figure = plt.figure()

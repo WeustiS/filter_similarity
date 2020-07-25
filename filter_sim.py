@@ -4,7 +4,9 @@ import math
 from tqdm import tqdm
 import torch
 from util import *
+import sys
 
+sys.setrecursionlimit(2000)
 
 linSort = False
 hierSort = True
@@ -29,7 +31,7 @@ print("Filters got")
 #frames = create_permutations(choices, 9)
 frames = []
 if method == "randomNumberPermutation":
-    frames = create_permutations([0, 1/3, 2/3, 1], 9)
+    frames = create_permutations([0, 1], 9)
 elif method == "randomMatrixGeneration":
     frames = np.random.randint(0, 10, (50000, 9))
 else:
@@ -93,10 +95,33 @@ if hierSort:
         plt.xlim([0, len(dist_mat)])
         plt.ylim([0, len(dist_mat)])
         plt.show(block=False)
-        plt.savefig("permutation_mag1_noNeg_thirds_l28/"+str(method)+".png")
+        plt.savefig("permutation_mag1_noNeg_full_l28/"+str(method)+".png")
 
 if vis:
     figure = plt.figure()
     axes = figure.add_subplot(111)
-    caxes = axes.matshow(np.array(data3), interpolation ='none')
+    caxes = axes.matshow(np.array(dist_mat), interpolation ='none')
     figure.colorbar(caxes)
+# benefits of filter diversity, measurements https://arxiv.org/pdf/2004.03334v2.pdf
+# benefits of filter diversity https://github.com/ddhh/NoteBook/blob/master/%E6%B7%B1%E5%BA%A6%E5%AD%A6%E4%B9%A0/LNCS%207700%20Neural%20Networks%20Tricks%20of%20the%20Trade.pdf
+# weight variance on quality http://cce.lternet.edu/docs/bibliography/Public/377ccelter.pdf
+# " In theory, the larger the filter variance, the more important the filter is. https://ieeexplore.ieee.org/stamp/stamp.jsp?arnumber=8786196
+
+'''
+https://arxiv.org/pdf/1906.04252.pdf
+https://openaccess.thecvf.com/content_ICCV_2017/papers/Zoumpourlis_Non-Linear_Convolution_Filters_ICCV_2017_paper.pdf
+https://www.machinecurve.com/index.php/2018/12/07/convolutional-neural-networks-and-their-components-for-computer-vision/
+https://misl.ece.drexel.edu/wp-content/uploads/2018/04/BayarStammTIFS01.pdf
+https://medium.com/@bairoukanasa5/improving-convolutional-neural-network-accuracy-using-gabor-filter-and-progressive-resizing-8e60caf50d8d
+https://arxiv.org/ftp/arxiv/papers/1904/1904.13204.pdf
+https://www.researchgate.net/post/Fixed_Gabor_Filter_in_Convolutional_Neural_Networks
+https://elib.dlr.de/117228/1/Masterthesis.pdf
+https://towardsdatascience.com/demystifying-convolutional-neural-networks-384785791596
+https://medium.com/@eos_da/applying-neural-network-and-local-laplace-filter-methods-to-very-high-resolution-satellite-imagery-3b203e5cc444
+http://papers.nips.cc/paper/4061-layer-wise-analysis-of-deep-networks-with-gaussian-kernels.pdf
+https://arxiv.org/pdf/1803.00388.pdf
+https://vcl.iti.gr/new/volterra-based-convolution-filter-implementation-in-torch/
+https://www.google.com/search?q=filter+normalization+convolutional+neural+network&oq=filter+normalization+conv&aqs=chrome.1.69i57j33l4.5731j0j7&sourceid=chrome&ie=UTF-8
+https://stats.stackexchange.com/questions/133368/how-to-normalize-filters-in-convolutional-neural-networks
+https://arxiv.org/pdf/1911.09737.pdf
+'''

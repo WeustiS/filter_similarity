@@ -2,6 +2,7 @@ import numpy as np
 from scipy.spatial.distance import pdist, squareform
 from fastcluster import linkage
 from itertools import product
+import warnings
 
 def seriation(Z, N, cur_index):
     '''
@@ -58,4 +59,4 @@ def scaled_abs_x(x):
 def create_permutations(choices, slots):
     return np.array(list(product(choices, repeat=slots)))
 
-epsilon = .00001
+epsilon = 2E-7 # https://en.wikipedia.org/wiki/Machine_epsilon 32 bit float

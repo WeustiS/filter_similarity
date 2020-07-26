@@ -8,7 +8,6 @@ import sys
 import os
 
 sys.setrecursionlimit(2000)
-vgg = models.vgg16(pretrained=True)
 
 def main():
 
@@ -21,11 +20,11 @@ def main():
     if hierSort:
         assert generateDistMat
 
-    method = "randomMatrixGeneration" if randMat else "randomNumberPermutation"
+    method = "randomMatrixGeneration" if randMat else "numberPermutation"
 
+    # all Conv2D layers [0, 2, 5, 7, 10, 12, 14, 17, 19, 21, 24, 26, 28]
+    for layer in tqdm([0], desc='Getting Layer Filters'):
 
-
-    for layer in tqdm([0], desc='Getting Layer Filters'): # all Conv2D layers [0, 2, 5, 7, 10, 12, 14, 17, 19, 21, 24, 26, 28]
         dist_mat = []
         filters = get_filters('vgg', layer)
 
@@ -78,37 +77,107 @@ def get_filters(model_name, layer):
     filters = []
     for i in range(vgg.features[layer].out_channels): # filters
         for j in range(3): # rgb
-            filters.append(vgg.features[layer].weight.data.numpy()[i, j, :, :]) # out, in, w, h (or h, w but who cares)
+            filters.append(np.reshape(vgg.features[layer].weight.data.numpy()[i, j, :, :], 9))
+            # out, in, w, h (or h, w but who cares)
+    filters = np.array(filters)
     return filters
 
-def get_frames(method):
+
+def get_frames(n, method):
+    assert n>0, "n must be positive and non-zero"
     frames = []
-    if method == "randomNumberPermutation":
-        frames = create_permutations([0, .5, 1], 9)
+    if method == "numberPermutation":
+        assert n>1, "N cannot be 1 for numberPermutation, there's only 1 permutation. Just like, do [1]*9 bro"
+        if n >= 5:
+            warnings.warn(
+                f"\n----\nFor randomNumberPermutation you are about to generate {n ** 9} items, are you sure?\n----\n")
+            ans = input("Y/N")
+            if ans.lower() != "y":
+                assert False, "Aborted"
+        frames = create_permutations(np.arange(0, 1 + epsilon, 1/(n-1)), 9)
+    elif method == "randomNumberPermutation":
+        assert n > 1, "N cannot be 1 for randomNumberPermutation, there's only 1 permutation. Just like, do [1]*9 bro"
+        if n >= 5:
+            warnings.warn(f"\n----\nFor randomNumberPermutation you are about to generate {n**9} items, are you sure?\n----\n")
+            ans = input("Y/N")
+            if ans.lower() != "y":
+                assert False, "Aborted"
+        frames = create_permutations(np.random.rand(n), 9)
     elif method == "randomMatrixGeneration":
-        frames = np.random.randint(0, 10, (50000, 9))
+        if n < 10:
+            warnings.warn("For randomMatrixGeneration you probably want a very large N")
+        frames = np.random.rand(n, 9)
     else:
-        frames = create_permutations([0, 1 / 3, 2 / 3, 1], 9)
+        assert False, f"{method} is not a method in get_frames"
+
     return frames
+
 
 def encode_filters(filters, frames):
     encodings = []
-    filters = [np.reshape(filter, 9) for filter in filters]
     for filter in tqdm(filters, desc='Encoding Filters'):
         encoding = []
         for perm in frames:
             encoding.append(np.dot(filter, perm))
         norm = math.sqrt(np.dot(encoding, encoding))
         encodings.append([x / norm for x in encoding])
+
     return encodings
 
+
+def encode_filters_cuda(filters, frames):
+    warnings.warn("This is slower than CPU, for some reason")
+    encodings = []
+
+    filters= torch.stack([torch.from_numpy(x).cuda() for x in filters]).cuda()
+    frames = torch.stack([torch.from_numpy(x).cuda() for x in frames]).float().cuda()
+
+    for filter in tqdm(filters, desc='Encoding Filters'):
+        encoding = []
+        for perm in frames:
+            encoding.append(torch.dot(filter, perm))
+        print("1")
+        encoding = torch.Tensor(encoding).cuda()
+        print("2")
+        norm = torch.sqrt(torch.dot(encoding, encoding))
+        encodings.append([x / norm for x in encoding])
+        print("3")
+    encodings = torch.stack(encodings).cuda()
+    return encodings
+
+
 def compare_encodings(encodings):
+    warnings.warn("you probably should use CUDA version")
     data = []
     for i in tqdm(range(len(encodings)), desc='Comparing Encodings'):
         xarr = [0]*len(encodings)
         for j in range(len(encodings)):
-            if i<=j:
+            if i<j:
                 xarr[j] = np.dot(encodings[i], encodings[j])
+            if i == j:
+                xarr[j] = 1
+            else:
+                pass
+        data.append(xarr)
+    for i in tqdm(range(len(encodings)), desc='Finalizing Encodings'):
+        for j in range(len(encodings)):
+            if i>j:
+                data[i][j] = data[j][i]
+    return data
+
+def compare_encodings_cuda(encodings):
+    data = []
+    if type(encodings) is not type(torch.Tensor()):
+        tmp = [torch.Tensor(x).cuda() for x in encodings]
+        encodings = torch.stack(tmp).cuda()
+        del tmp
+    for i in tqdm(range(len(encodings)), desc='Comparing Encodings... with CUDA'):
+        xarr = [0]*len(encodings)
+        for j in range(len(encodings)):
+            if i<j:
+                xarr[j] = torch.dot(encodings[i], encodings[j])
+            if i==j:
+                xarr[j] = 1
             else:
                 pass
         data.append(xarr)
@@ -129,6 +198,7 @@ def generate_dist_mat(dot_relations):
     for i in range(len(dist_mat)):
         assert abs(dist_mat[i][i]) < epsilon
         dist_mat[i][i] = 0
+    return dist_mat
 
 if __name__ == "__main__":
     main()
@@ -154,4 +224,9 @@ https://vcl.iti.gr/new/volterra-based-convolution-filter-implementation-in-torch
 https://www.google.com/search?q=filter+normalization+convolutional+neural+network&oq=filter+normalization+conv&aqs=chrome.1.69i57j33l4.5731j0j7&sourceid=chrome&ie=UTF-8
 https://stats.stackexchange.com/questions/133368/how-to-normalize-filters-in-convolutional-neural-networks
 https://arxiv.org/pdf/1911.09737.pdf
+'''
+
+'''
+Encoding Filters: 100%|██████████| 192/192 [02:45<00:00,  1.16it/s]
+Comparing Encodings:  10%|▉         | 19/192 [05:57<54:15, 18.82s/it]
 '''

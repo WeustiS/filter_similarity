@@ -8,27 +8,80 @@ import sys
 import os
 
 sys.setrecursionlimit(2000)
-
-linSort = False
-hierSort = True
-vis = False
-randMat = False
-method = "randomMatrixGeneration" if randMat else "randomNumberPermutation"
-
 vgg = models.vgg16(pretrained=True)
-# layer_1 = vgg.features[0].weight.data.numpy() # 64, 3, 3, 3
 
-# For each layer, get the filters
+def main():
 
-for layer in tqdm([0, 2, 5, 7, 10, 12, 14, 17, 19, 21, 24, 26, 28], desc='Getting Layer Filters'): # Conv2D layers
+    linSort = False
+    hierSort = True
+    vis = False
+    randMat = False
+    generateDistMat = True
+
+    if hierSort:
+        assert generateDistMat
+
+    method = "randomMatrixGeneration" if randMat else "randomNumberPermutation"
+
+
+
+    for layer in tqdm([0], desc='Getting Layer Filters'): # all Conv2D layers [0, 2, 5, 7, 10, 12, 14, 17, 19, 21, 24, 26, 28]
+        dist_mat = []
+        filters = get_filters('vgg', layer)
+
+        frames = get_frames(method)
+
+        encodings = encode_filters(filters, frames)
+
+        dot_relations = compare_encodings(encodings)
+
+        if generateDistMat:
+            dist_mat = generate_dist_mat(dot_relations)
+
+        if linSort:
+            sorted_col_indices = sorted(range(len([row[0] for row in dot_relations])), key=lambda k: [row[0] for row in dot_relations][k], reverse=True)
+            data2 = []
+            for row in dot_relations:
+                data2.append([row[i] for i in sorted_col_indices])
+            dot_relations=[data2[i] for i in sorted_col_indices]
+
+
+        if hierSort:
+            # https://stats.stackexchange.com/questions/195456/how-to-select-a-clustering-method-how-to-validate-a-cluster-solution-to-warran/195481#195481
+            # https://stats.stackexchange.com/questions/195446/choosing-the-right-linkage-method-for-hierarchical-clustering
+            methods = ["single", 'complete', 'average', 'weighted', 'centroid', 'median', 'ward']
+            os.mkdir("default_full_l" + str(layer) + "/")
+            for method in methods:
+                print("Method:\t", method)
+
+                ordered_dist_mat, res_order, res_linkage = compute_serial_matrix(dist_mat, method)
+
+                figure = plt.figure()
+                axes = figure.add_subplot(111)
+                caxes = axes.pcolormesh(ordered_dist_mat)
+                figure.colorbar(caxes)
+                plt.savefig("default_full_l" + str(layer) + "/"+str(method)+".png")
+                plt.close(figure)
+        if vis:
+            figure = plt.figure()
+            axes = figure.add_subplot(111)
+            caxes = axes.matshow(np.array(dist_mat), interpolation ='none')
+            figure.colorbar(caxes)
+
+
+def get_filters(model_name, layer):
+    if model_name == 'vgg':
+        vgg = models.vgg16(pretrained=True)
+        assert layer in [0, 2, 5, 7, 10, 12, 14, 17, 19, 21, 24, 26, 28], "You did not select a Conv2D layer for VGG16"
+    else:
+        raise NameError(f"The model {model_name} is not currently supported by get_filters")
     filters = []
     for i in range(vgg.features[layer].out_channels): # filters
         for j in range(3): # rgb
             filters.append(vgg.features[layer].weight.data.numpy()[i, j, :, :]) # out, in, w, h (or h, w but who cares)
-    print("Filters got")
-    # Create permutations of 3x3 matrices
-    #choices = [-1, 0, .5, 2]
-    #frames = create_permutations(choices, 9)
+    return filters
+
+def get_frames(method):
     frames = []
     if method == "randomNumberPermutation":
         frames = create_permutations([0, .5, 1], 9)
@@ -36,26 +89,26 @@ for layer in tqdm([0, 2, 5, 7, 10, 12, 14, 17, 19, 21, 24, 26, 28], desc='Gettin
         frames = np.random.randint(0, 10, (50000, 9))
     else:
         frames = create_permutations([0, 1 / 3, 2 / 3, 1], 9)
-    print(f"Created {len(frames)} permutations")
+    return frames
 
-    # Encode the filters by 'convolving' over each frame
+def encode_filters(filters, frames):
     encodings = []
     filters = [np.reshape(filter, 9) for filter in filters]
     for filter in tqdm(filters, desc='Encoding Filters'):
         encoding = []
         for perm in frames:
-           encoding.append(np.dot(filter, perm))
+            encoding.append(np.dot(filter, perm))
         norm = math.sqrt(np.dot(encoding, encoding))
-        encodings.append([x/norm for x in encoding])
+        encodings.append([x / norm for x in encoding])
+    return encodings
 
-    # Now compare each encoding by dot producting, keep in mind commutivity
+def compare_encodings(encodings):
     data = []
-    encodings = torch.stack([torch.tensor(x).cuda() for x in encodings]).cuda()
     for i in tqdm(range(len(encodings)), desc='Comparing Encodings'):
         xarr = [0]*len(encodings)
         for j in range(len(encodings)):
             if i<=j:
-                xarr[j] = torch.dot(encodings[i], encodings[j]).item()
+                xarr[j] = np.dot(encodings[i], encodings[j])
             else:
                 pass
         data.append(xarr)
@@ -63,47 +116,22 @@ for layer in tqdm([0, 2, 5, 7, 10, 12, 14, 17, 19, 21, 24, 26, 28], desc='Gettin
         for j in range(len(encodings)):
             if i>j:
                 data[i][j] = data[j][i]
+    return data
 
+def generate_dist_mat(dot_relations):
+    dist_mat = []
+    for row in dot_relations:
+        dst_row = []
+        for i in row:
+            dst_row.append(scaled_abs_x(i))
+        dist_mat.append(dst_row)
 
-    if linSort:
-        sorted_col_indices = sorted(range(len([row[0] for row in data])), key=lambda k: [row[0] for row in data][k], reverse=True)
-        data2 = []
-        for row in data:
-            data2.append([row[i] for i in sorted_col_indices])
-        data3=[data2[i] for i in sorted_col_indices]
+    for i in range(len(dist_mat)):
+        assert abs(dist_mat[i][i]) < epsilon
+        dist_mat[i][i] = 0
 
-    if hierSort:
-        dist_mat = []
-        for row in data:
-            dst_row = []
-            for i in row:
-                dst_row.append(scaled_abs_x(i))
-            dist_mat.append(dst_row)
-
-        for i in range(len(dist_mat)):
-            assert abs(dist_mat[i][i]) < epsilon
-            dist_mat[i][i] = 0
-        # https://stats.stackexchange.com/questions/195456/how-to-select-a-clustering-method-how-to-validate-a-cluster-solution-to-warran/195481#195481
-        # https://stats.stackexchange.com/questions/195446/choosing-the-right-linkage-method-for-hierarchical-clustering
-        methods = ["single", 'complete', 'average', 'weighted', 'centroid', 'median', 'ward']
-        os.mkdir("default_full_l" + str(layer) + "/")
-        for method in methods:
-            print("Method:\t", method)
-
-            ordered_dist_mat, res_order, res_linkage = compute_serial_matrix(dist_mat, method)
-
-            plt.pcolormesh(ordered_dist_mat)
-            plt.xlim([0, len(dist_mat)])
-            plt.ylim([0, len(dist_mat)])
-            # plt.show(block=False)
-            plt.colorbar()
-            plt.savefig("default_full_l" + str(layer) + "/"+str(method)+".png")
-
-    if vis:
-        figure = plt.figure()
-        axes = figure.add_subplot(111)
-        caxes = axes.matshow(np.array(dist_mat), interpolation ='none')
-        figure.colorbar(caxes)
+if __name__ == "__main__":
+    main()
 # benefits of filter diversity, measurements https://arxiv.org/pdf/2004.03334v2.pdf
 # benefits of filter diversity https://github.com/ddhh/NoteBook/blob/master/%E6%B7%B1%E5%BA%A6%E5%AD%A6%E4%B9%A0/LNCS%207700%20Neural%20Networks%20Tricks%20of%20the%20Trade.pdf
 # weight variance on quality http://cce.lternet.edu/docs/bibliography/Public/377ccelter.pdf
